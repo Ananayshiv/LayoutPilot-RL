@@ -1,0 +1,16 @@
+# Training data, checkpoints, and generated outputs
+runs/
+results/
+experiment_outputs/
+smoke/
+data/
+*.pt
+*.pth
+*.ckpt
+CODE_AUDIT_RESULTS.json
+.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
