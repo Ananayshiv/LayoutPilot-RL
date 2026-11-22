@@ -13,6 +13,29 @@ PyTorch implementation of discrete-action actor–critic **PPO-Clip**, GAE, KL m
 
 BC+PPO minus PPO-only = **+0.0134** (reported paired bootstrap 95% CI **[−0.0128, +0.0429]**). This interval includes zero. These values measure a handcrafted geometry function, **not** human-rated poster quality. Example SVG outputs still require aesthetic review.
 
+## Budget sweep: is PPO under-trained? (v2)
+
+The v1 numbers above come from **8,192 environment steps**, which is only 16 PPO updates of 512 steps. The obvious question is whether PPO is fundamentally weak here or just under-trained. `layoutpilot.sweep` answers it with one variable at a time:
+
+- **Budgets:** 8,192 / 131,072 / 524,288 environment steps (same rollout size, learning rate, and network as v1)
+- **Seeds:** 5 per cell, for both PPO and BC+PPO (700 greedy-expert examples, as in v1)
+- **Evaluation:** **200** held-out layouts (seeds 20000+, up from 60), with per-layout scores saved so every comparison is **paired**
+- **Metrics:** mean ± std over seeds, the **fraction of the greedy gap closed** = (policy − initial) / (greedy − initial), and paired-bootstrap 95% CIs for BC+PPO − PPO and policy − greedy at each budget
+
+```bash
+python -m layoutpilot.sweep --budgets 8192 131072 524288 --seeds 0 1 2 3 4   # CPU, resumable
+python -m layoutpilot.sweep --aggregate-only                                    # writes runs/sweep/RESULTS.md
+```
+
+| Method | Env steps | Score (5 seeds) | Greedy gap closed |
+|---|---:|---:|---:|
+| PPO | 8,192 / 131,072 / 524,288 | *pending* | *pending* |
+| BC + PPO | 8,192 / 131,072 / 524,288 | *pending* | *pending* |
+
+**Pending:** filled from `runs/sweep/RESULTS.md` after the sweep runs.
+
+**Why greedy is not the bar RL must clear:** the greedy solver is an **oracle with simulator access**. At every step it tries all 25 actions against the *true* score, which is 875 reward evaluations per episode. The PPO policy makes **zero** reward queries at inference: it amortizes the search into one forward pass per step. That matters whenever the reward is expensive or unavailable at deployment time, for example a human rating or a learned reward model, which is exactly the setting the reward-overoptimization experiments below study. The meaningful question is therefore how much of the oracle's improvement a query-free policy recovers, and at what training budget.
+
 ## Research methodology
 The PPO reward proxy can disagree with independent occlusion/whitespace metrics. Learned-regressor Best-of-N experiments maintain disjoint training/evaluation templates; advanced protocols probe high-score tails, uncertainty-aware acquisition, and shifted proposal distributions. Preliminary smoke trials **do not establish reward hacking or mitigation**. Do not interpret Goodhart's law as a guaranteed empirical downturn.
 
@@ -20,6 +43,8 @@ The finite-horizon observation currently omits remaining time. With `gamma < 1`,
 
 ## Reproduce
 ```bash
+python -m pytest -q
+python -m layoutpilot.sweep --budgets 8192 131072 524288 --seeds 0 1 2 3 4
 pip install -r requirements.txt
 python -m layoutpilot.train --steps 8192 --warmstart-examples 0 --seed 42 --out runs/ppo
 python -m layoutpilot.train --steps 8192 --warmstart-examples 700 --seed 42 --out runs/bc_ppo

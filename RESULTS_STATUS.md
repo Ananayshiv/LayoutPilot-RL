@@ -6,3 +6,7 @@
 - BC+PPO minus PPO-only: **+0.0134**, paired 95% bootstrap interval **[-0.0128, 0.0429]**.
 
 The interval includes zero; do not claim robust BC superiority. The learned-proxy and extreme-tail experiments are exploratory and not validated as Goodhart-law findings. These figures are user-provided Colab outputs, not rerun on GitHub.
+
+# v2 sweep (pending)
+
+`layoutpilot/sweep.py` reruns PPO and BC+PPO at 8,192 / 131,072 / 524,288 steps × 5 seeds on 200 held-out layouts with per-layout scores, paired bootstrap CIs, and the fraction of the greedy-oracle gap closed. No v2 numbers exist until `runs/sweep/RESULTS.md` is produced; the v1 figures above remain the only measured results.
