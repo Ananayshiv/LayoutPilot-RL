@@ -201,6 +201,12 @@ def expert_warmstart(model,env,device,examples=0,epochs=6,batch_size=128,lr=1e-3
 
 
 def evaluate(model,seeds,device,random_policy=False,horizon=35,greedy_policy=False):
+    initial,qualities=evaluate_episodes(model,seeds,device,random_policy,horizon,greedy_policy)
+    return float(np.mean(initial)),float(np.mean(qualities))
+
+
+def evaluate_episodes(model,seeds,device,random_policy=False,horizon=35,greedy_policy=False):
+    """Per-episode (initial, final) geometric scores on the given layout seeds."""
     qualities=[];initial=[]
     for seed in seeds:
         env=PosterEnv(seed=seed,horizon=horizon);obs=env.reset()
@@ -214,7 +220,7 @@ def evaluate(model,seeds,device,random_policy=False,horizon=35,greedy_policy=Fal
             obs,_,done,info=env.step(a)
             if done:break
         qualities.append(score(env.rects,env.target))
-    return float(np.mean(initial)),float(np.mean(qualities))
+    return [float(x) for x in initial],[float(x) for x in qualities]
 
 
 def _font(sz,bold=False):
@@ -318,9 +324,10 @@ def run(args):
                 best_weights={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
     model.load_state_dict(best_weights)
     seeds=list(range(20000,20000+args.eval_episodes))
-    qstart,qppo=evaluate(model,seeds,device,horizon=args.horizon)
-    _,qrandom=evaluate(model,seeds,device,random_policy=True,horizon=args.horizon)
-    _,qgreedy=evaluate(model,seeds,device,greedy_policy=True,horizon=args.horizon)
+    ep_start,ep_ppo=evaluate_episodes(model,seeds,device,horizon=args.horizon)
+    _,ep_random=evaluate_episodes(model,seeds,device,random_policy=True,horizon=args.horizon)
+    _,ep_greedy=evaluate_episodes(model,seeds,device,greedy_policy=True,horizon=args.horizon)
+    qstart,qppo,qrandom,qgreedy=(float(np.mean(x)) for x in (ep_start,ep_ppo,ep_random,ep_greedy))
     demo=PosterEnv(seed=10001,horizon=args.horizon)
     obs=observation(demo.rects,demo.target)
     for _ in range(args.horizon):
@@ -339,10 +346,10 @@ def run(args):
     with (out/'training.csv').open('w',newline='') as f:
         w=csv.writer(f);w.writerow(['update','steps','ppo_loss','mean_initial_quality','mean_ppo_quality','approx_kl','clip_fraction','kl_early_stop']);w.writerows(hist)
     import json
-    metrics={'n_eval_episodes':args.eval_episodes,'eval_seed_start':20000,'validation_seed_start':1000,'target_kl':args.target_kl,'initial_score':qstart,'random_policy_score':qrandom,'greedy_oracle_score':qgreedy,'ppo_policy_score':qppo,'improvement_over_initial':qppo-qstart,'improvement_over_random':qppo-qrandom,'templates':list(TEMPLATES),'selected_validation_update':best_update,'best_validation_score':best_val,'expert_warmstart_examples':args.warmstart_examples,'bc_train_loss':bc_loss if args.warmstart_examples else None,'disclaimer':'Geometric proxy reward, NOT a validated human aesthetic measure.'}
+    metrics={'n_eval_episodes':args.eval_episodes,'eval_seed_start':20000,'validation_seed_start':1000,'target_kl':args.target_kl,'initial_score':qstart,'random_policy_score':qrandom,'greedy_oracle_score':qgreedy,'ppo_policy_score':qppo,'improvement_over_initial':qppo-qstart,'improvement_over_random':qppo-qrandom,'templates':list(TEMPLATES),'selected_validation_update':best_update,'best_validation_score':best_val,'expert_warmstart_examples':args.warmstart_examples,'bc_train_loss':bc_loss if args.warmstart_examples else None,'seed':args.seed,'steps':args.steps,'reward_queries_per_step':{'policy':0,'greedy_oracle':N_ACTS},'per_episode':{'initial':ep_start,'policy':ep_ppo,'random':ep_random,'greedy_oracle':ep_greedy},'disclaimer':'Geometric proxy reward, NOT a validated human aesthetic measure.'}
     (out/'metrics.json').write_text(json.dumps(metrics,indent=2))
     print('Saved policy.pt, before.png, after.png, editable_poster.svg, greedy_oracle.png/svg, metrics.json, training.csv to',out)
-    print(metrics)
+    print({k:v for k,v in metrics.items() if k!='per_episode'})
 
 
 def parse_args(argv=None):
